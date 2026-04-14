@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PARMCO — Phone App Raspberry Pi Motor Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:      #06080d;
+    --surf:    #0d1117;
+    --surf2:   #161b22;
+    --border:  #21262d;
+    --accent:  #00e5ff;
+    --accent2: #ff6b35;
+    --green:   #3fb950;
+    --red:     #f85149;
+    --text:    #e6edf3;
+    --muted:   #7d8590;
+    --mono:    'IBM Plex Mono', monospace;
+    --sans:    'Syne', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 16px; line-height: 1.7; overflow-x: hidden; }
+  body::after { content: ''; position: fixed; inset: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,229,255,0.012) 2px, rgba(0,229,255,0.012) 4px); pointer-events: none; z-index: 9999; }
+  body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(0,229,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.04) 1px, transparent 1px); background-size: 60px 60px; pointer-events: none; z-index: 0; }
+
+  nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 48px; height: 60px; background: rgba(6,8,13,0.92); backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); }
+  .nav-logo { font-family: var(--mono); font-size: 1rem; font-weight: 700; color: var(--accent); letter-spacing: 0.15em; text-shadow: 0 0 20px rgba(0,229,255,0.4); }
+  .nav-links { display: flex; gap: 36px; }
+  .nav-links a { color: var(--muted); text-decoration: none; font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.08em; transition: color 0.2s; }
+  .nav-links a:hover { color: var(--accent); }
+
+  .wrap { position: relative; z-index: 1; max-width: 1080px; margin: 0 auto; padding: 0 40px; }
+  section { padding: 96px 0; }
+
+  .hero { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 120px 0 80px; }
+  .hero-chip { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 0.72rem; color: var(--accent); border: 1px solid rgba(0,229,255,0.3); border-radius: 2px; padding: 5px 12px; margin-bottom: 32px; letter-spacing: 0.12em; background: rgba(0,229,255,0.05); }
+  .hero-chip::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: blink 1.4s step-end infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .hero h1 { font-size: clamp(3.5rem, 8vw, 7rem); font-weight: 800; line-height: 1; letter-spacing: -0.03em; margin-bottom: 0; }
+  .hero h1 .outline { -webkit-text-stroke: 2px var(--accent); color: transparent; }
+  .hero-sub { font-family: var(--mono); font-size: 0.9rem; color: var(--muted); margin: 16px 0 28px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .hero p { max-width: 560px; font-size: 1.05rem; color: #8b949e; margin-bottom: 44px; line-height: 1.8; }
+  .hero-btns { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 72px; }
+
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 26px; border-radius: 3px; font-family: var(--mono); font-size: 0.82rem; font-weight: 600; letter-spacing: 0.1em; text-decoration: none; transition: all 0.2s; cursor: pointer; border: none; }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { background: #33eaff; box-shadow: 0 0 24px rgba(0,229,255,0.35); }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  .status-bar { display: flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; max-width: 700px; }
+  .status-seg { flex: 1; display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-right: 1px solid var(--border); background: var(--surf); }
+  .status-seg:last-child { border-right: none; }
+  .s-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+  .s-dot.green  { background: var(--green); }
+  .s-dot.cyan   { background: var(--accent); }
+  .s-dot.orange { background: var(--accent2); }
+  .status-seg span { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); line-height: 1.3; }
+  .status-seg strong { font-family: var(--mono); font-size: 0.7rem; color: var(--text); display: block; }
+
+  .label { font-family: var(--mono); font-size: 0.7rem; color: var(--accent2); letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 10px; }
+  h2 { font-size: clamp(1.8rem, 3vw, 2.4rem); font-weight: 800; letter-spacing: -0.025em; margin-bottom: 16px; line-height: 1.15; }
+  .intro { max-width: 580px; color: #8b949e; margin-bottom: 56px; font-size: 1rem; line-height: 1.8; }
+
+  .arch { display: grid; grid-template-columns: 1fr 80px 1fr 80px 1fr; align-items: center; margin: 48px 0; }
+  .arch-box { background: var(--surf); border: 1px solid var(--border); border-radius: 8px; padding: 28px 20px; text-align: center; transition: border-color 0.3s; }
+  .arch-box:hover { border-color: var(--accent); }
+  .arch-box .ico { font-size: 2.2rem; display: block; margin-bottom: 14px; }
+  .arch-box .lbl { font-family: var(--mono); font-size: 0.72rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 8px; }
+  .arch-box .dsc { font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
+  .arch-conn { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .arch-conn .proto { font-family: var(--mono); font-size: 0.62rem; color: var(--muted); white-space: nowrap; }
+  .conn-line { position: relative; width: 54px; height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .conn-line::after { content: ''; position: absolute; right: -5px; top: -4px; border: 5px solid transparent; border-left-color: var(--accent2); }
+
+  .hbox { background: linear-gradient(135deg, rgba(0,229,255,0.05), rgba(255,107,53,0.05)); border: 1px solid rgba(0,229,255,0.2); border-radius: 8px; padding: 32px; margin: 32px 0; display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
+  .hbox .hico { font-size: 2.5rem; flex-shrink: 0; }
+  .hbox h3 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; color: var(--accent); }
+  .hbox p { font-size: 0.88rem; color: var(--muted); line-height: 1.7; }
+
+  .gpio-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin: 32px 0; }
+  .gpio-item { background: var(--surf); border: 1px solid var(--border); border-radius: 6px; padding: 16px 20px; display: flex; align-items: center; gap: 14px; }
+  .gpio-pin { font-family: var(--mono); font-size: 1.1rem; font-weight: 700; color: var(--accent); min-width: 28px; }
+  .g-name { font-family: var(--mono); font-size: 0.78rem; color: var(--text); }
+  .g-role { font-size: 0.75rem; color: var(--muted); }
+
+  .tbl-wrap { overflow-x: auto; margin: 24px 0; border-radius: 8px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  th { background: var(--surf2); padding: 13px 20px; text-align: left; font-family: var(--mono); font-size: 0.7rem; color: var(--accent); letter-spacing: 0.12em; border-bottom: 1px solid var(--border); }
+  td { padding: 12px 20px; border-bottom: 1px solid rgba(33,38,45,0.6); color: var(--muted); }
+  td:first-child { font-family: var(--mono); color: var(--text); font-size: 0.85rem; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(0,229,255,0.03); }
+
+  .code-box { background: var(--surf); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 24px 0; }
+  .code-head { display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--border); background: #090d14; }
+  .mac { width:11px;height:11px;border-radius:50%; }
+  .mac.r{background:#f85149;} .mac.y{background:#d29922;} .mac.g{background:#3fb950;}
+  .code-filename { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin-left: 10px; }
+  pre { padding: 24px; overflow-x: auto; font-family: var(--mono); font-size: 0.8rem; line-height: 1.85; color: #c9d1d9; }
+  .kw{color:#ff7b72;} .ty{color:#79c0ff;} .fn{color:#d2a8ff;} .cm{color:#484f58;font-style:italic;} .nu{color:#f0883e;} .st{color:#a5d6ff;}
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+  .card { background: var(--surf); border: 1px solid var(--border); border-radius: 8px; padding: 26px; transition: border-color 0.25s, transform 0.25s; }
+  .card:hover { border-color: var(--accent); transform: translateY(-4px); }
+  .card-ico { font-size: 1.7rem; display: block; margin-bottom: 14px; }
+  .card h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 10px; color: var(--text); }
+  .card p { font-size: 0.85rem; color: var(--muted); line-height: 1.65; }
+  .tag { display: inline-block; margin-top: 14px; font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.1em; color: var(--accent2); border: 1px solid rgba(255,107,53,0.3); border-radius: 2px; padding: 2px 8px; background: rgba(255,107,53,0.07); }
+  .tag.done { color: var(--green); border-color: rgba(63,185,80,0.3); background: rgba(63,185,80,0.07); }
+
+  .timeline { position: relative; padding-left: 36px; }
+  .timeline::before { content: ''; position: absolute; left: 10px; top: 8px; bottom: 8px; width: 1px; background: linear-gradient(to bottom, var(--accent), var(--accent2)); }
+  .tl-item { position: relative; margin-bottom: 44px; }
+  .tl-dot { position: absolute; left: -30px; top: 6px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border); background: var(--bg); }
+  .tl-dot.active { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 12px rgba(0,229,255,0.5); }
+  .tl-dot.done { border-color: var(--green); background: var(--green); }
+  .tl-label { font-family: var(--mono); font-size: 0.68rem; color: var(--accent2); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 6px; }
+  .tl-title { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
+  .tl-body { font-size: 0.88rem; color: var(--muted); line-height: 1.7; }
+
+  .divider { height: 1px; background: linear-gradient(90deg, transparent, var(--border), transparent); }
+
+  footer { position: relative; z-index: 1; padding: 48px 40px; text-align: center; font-family: var(--mono); font-size: 0.75rem; color: var(--muted); border-top: 1px solid var(--border); }
+  footer .ac { color: var(--accent); } footer .ac2 { color: var(--accent2); }
+
+  @media (max-width: 768px) {
+    nav { padding: 0 20px; } .nav-links { display: none; } .wrap { padding: 0 20px; } section { padding: 64px 0; }
+    .hero h1 { font-size: 3rem; }
+    .arch { grid-template-columns: 1fr; gap: 12px; }
+    .arch-conn { transform: rotate(90deg); margin: 8px 0; }
+    .status-bar { flex-direction: column; }
+    .status-seg { border-right: none; border-bottom: 1px solid var(--border); }
+    .status-seg:last-child { border-bottom: none; }
+  }
+
+  @keyframes fadeUp { from{opacity:0;transform:translateY(20px);} to{opacity:1;transform:translateY(0);} }
+  .fu { animation: fadeUp 0.7s ease both; }
+  .fu:nth-child(2){animation-delay:0.1s;} .fu:nth-child(3){animation-delay:0.2s;} .fu:nth-child(4){animation-delay:0.3s;} .fu:nth-child(5){animation-delay:0.4s;}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">PARMCO</div>
+  <div class="nav-links">
+    <a href="#overview">Overview</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#protocol">Protocol</a>
+    <a href="#gpio">GPIO</a>
+    <a href="#features">Features</a>
+    <a href="#progress">Progress</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="overview">
+  <div class="wrap">
+    <div class="hero-chip fu">ECSE 4235 &nbsp;·&nbsp; SPRING 2026 &nbsp;·&nbsp; FINAL PROJECT</div>
+    <h1 class="fu">PAR<span class="outline">MCO</span></h1>
+    <div class="hero-sub fu">Phone App Raspberry Pi Motor Control</div>
+    <p class="fu">A fully standalone embedded system. An Android app communicates over Bluetooth RFCOMM to a Raspberry Pi 4, delivering real-time DC motor control with live RPM feedback — no internet, no cloud, no dependencies.</p>
+    <div class="hero-btns fu">
+      <a href="#architecture" class="btn btn-primary">↓ Architecture</a>
+      <a href="https://github.com" class="btn btn-ghost" target="_blank">GitHub →</a>
+    </div>
+    <div class="status-bar fu">
+      <div class="status-seg">
+        <div class="s-dot green"></div>
+        <div><strong>CP3 Complete</strong><span>Full manual control + RPM feedback</span></div>
+      </div>
+      <div class="status-seg">
+        <div class="s-dot cyan"></div>
+        <div><strong>BT RFCOMM Ch.1</strong><span>BT_SECURITY_LOW · MAC allowlist</span></div>
+      </div>
+      <div class="status-seg">
+        <div class="s-dot orange"></div>
+        <div><strong>Kotlin + C / ARMv7 ASM</strong><span>Android + Raspberry Pi 4 (32-bit OS)</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ARCHITECTURE -->
+<section id="architecture">
+  <div class="wrap">
+    <div class="label">System Design</div>
+    <h2>Architecture</h2>
+    <p class="intro">Three layers — Android app, Raspberry Pi server, and motor hardware — communicate through a compact protocol over Bluetooth RFCOMM Channel 1. No intermediaries, no cloud, no internet required.</p>
+
+    <div class="arch">
+      <div class="arch-box">
+        <span class="ico">📱</span>
+        <div class="lbl">Android App</div>
+        <div class="dsc">Kotlin · Jetpack Compose<br>Circular dial · On/Off<br>CW/CCW buttons<br>Live RPM display</div>
+      </div>
+      <div class="arch-conn">
+        <span class="proto">4-byte CMD ▶</span>
+        <div class="conn-line"></div>
+        <span class="proto">◀ ASCII "%d\n"</span>
+      </div>
+      <div class="arch-box">
+        <span class="ico">🖥️</span>
+        <div class="lbl">Raspberry Pi 4</div>
+        <div class="dsc">C + ARMv7 Assembly<br>RFCOMM BT server<br>POSIX threads · /dev/gpiomem<br>Software PWM @ 500 Hz</div>
+      </div>
+      <div class="arch-conn">
+        <span class="proto">GPIO PWM ▶</span>
+        <div class="conn-line"></div>
+        <span class="proto">◀ IR Rising Edge</span>
+      </div>
+      <div class="arch-box">
+        <span class="ico">⚙️</span>
+        <div class="lbl">Motor Hardware</div>
+        <div class="dsc">L293D Driver<br>DC Motor<br>3-blade propeller<br>IR Sensor · Status LED</div>
+      </div>
+    </div>
+
+    <div class="hbox">
+      <div class="hico">⚡</div>
+      <div>
+        <h3>ARM 32-bit Assembly — rpm_to_duty_asm()</h3>
+        <p>The RPM-to-duty-cycle conversion runs in hand-written ARMv7 inline assembly using <code style="font-family:var(--mono);color:var(--accent);font-size:0.85em">sdiv</code>, <code style="font-family:var(--mono);color:var(--accent);font-size:0.85em">mul</code>, and <code style="font-family:var(--mono);color:var(--accent);font-size:0.85em">movlt</code>/<code style="font-family:var(--mono);color:var(--accent);font-size:0.85em">movgt</code> for inline clamping. Input RPM is clamped to <strong style="color:var(--text)">400–5700 RPM</strong> and mapped linearly to <strong style="color:var(--text)">4–100% duty cycle</strong>. The app dial sends up to 7000 RPM, but values above 5700 saturate at 100% duty.</p>
+      </div>
+    </div>
+
+    <div class="code-box">
+      <div class="code-head"><div class="mac r"></div><div class="mac y"></div><div class="mac g"></div><span class="code-filename">bt_motor_server.c — rpm_to_duty_asm()</span></div>
+      <pre><span class="kw">int</span> min_rpm  = <span class="nu">400</span>,  max_rpm  = <span class="nu">5700</span>;  <span class="cm">/* RPM input clamp range     */</span>
+<span class="kw">int</span> min_duty = <span class="nu">4</span>,    max_duty = <span class="nu">100</span>;   <span class="cm">/* duty cycle % output range */</span>
+<span class="kw">int</span> span_duty = <span class="nu">96</span>,  span_rpm  = <span class="nu">5300</span>; <span class="cm">/* (max − min) spans         */</span>
+
+__asm__ volatile (
+    <span class="st">"cmp   %[val], %[minR]  \n"</span>   <span class="cm">/* clamp low                 */</span>
+    <span class="st">"movlt %[val], %[minR]  \n"</span>
+    <span class="st">"cmp   %[val], %[maxR]  \n"</span>   <span class="cm">/* clamp high                */</span>
+    <span class="st">"movgt %[val], %[maxR]  \n"</span>
+    <span class="st">"sub   %[val], %[val], %[minR]  \n"</span>  <span class="cm">/* shift to 0-base           */</span>
+    <span class="st">"mul   %[val], %[val], %[spanD] \n"</span>  <span class="cm">/* scale by duty span        */</span>
+    <span class="st">"sdiv  %[val], %[val], %[spanR] \n"</span>  <span class="cm">/* divide by RPM span        */</span>
+    <span class="st">"add   %[val], %[val], %[minD]  \n"</span>  <span class="cm">/* add minimum duty offset   */</span>
+    : [val]   <span class="st">"+r"</span>(rpm)
+    : [minR]  <span class="st">"r"</span>(<span class="nu">400</span>),  [maxR]  <span class="st">"r"</span>(<span class="nu">5700</span>),
+      [minD]  <span class="st">"r"</span>(<span class="nu">4</span>),    [maxD]  <span class="st">"r"</span>(<span class="nu">100</span>),
+      [spanD] <span class="st">"r"</span>(<span class="nu">96</span>),   [spanR] <span class="st">"r"</span>(<span class="nu">5300</span>)
+    : <span class="st">"cc"</span>
+);</pre>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- PROTOCOL -->
+<section id="protocol">
+  <div class="wrap">
+    <div class="label">Communication</div>
+    <h2>Packet Protocol</h2>
+    <p class="intro">Phone-to-Pi uses 4-byte binary packets, sent on every user state change. Pi-to-Phone uses newline-terminated ASCII decimal strings sent every 500 ms, read by Android's <code style="font-family:var(--mono);color:var(--accent);font-size:0.9em">BufferedReader.readLine()</code>. The Pi only sends when a client socket is open (<code style="font-family:var(--mono);color:var(--accent);font-size:0.9em">client_fd ≥ 0</code>).</p>
+
+    <div class="label" style="margin-bottom:12px;">PHONE → PI &nbsp;(4 bytes, sent on every state change)</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Byte</th><th>Field</th><th>Values</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>0</td><td>Power</td><td>0 = OFF &nbsp;|&nbsp; 1 = ON</td><td>OFF forces DIR_STOP + duty = 0 on Pi</td></tr>
+          <tr><td>1</td><td>Direction</td><td>0 = CW (Forward) &nbsp;|&nbsp; 1 = CCW (Reverse)</td><td>Maps to L293D IN1 / IN2</td></tr>
+          <tr><td>2</td><td>RPM high byte</td><td>Bits [15:8] of target RPM</td><td rowspan="2">Big-endian uint16. Pi clamps to 400–7000. Duty calc saturates at 5700 RPM.</td></tr>
+          <tr><td>3</td><td>RPM low byte</td><td>Bits [7:0] of target RPM</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="label" style="margin-bottom:12px;margin-top:40px;">PI → PHONE &nbsp;(ASCII string, every 500 ms)</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Format</th><th>Example</th><th>Encoding</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>"%d\n"</td><td>"1473\n"</td><td>UTF-8 ASCII, newline-terminated</td><td>IR rising-edge count over 500 ms window. Android strips non-digit chars before parseInt.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="code-box">
+      <div class="code-head"><div class="mac r"></div><div class="mac y"></div><div class="mac g"></div><span class="code-filename">bt_motor_server.c — RPM transmit (rpm_worker)</span></div>
+      <pre><span class="cm">/* Sent every RPM_SEND_US = 500,000 µs when client_fd >= 0 */</span>
+<span class="kw">char</span> out_buf[<span class="nu">32</span>];
+<span class="kw">int</span>  len = <span class="fn">snprintf</span>(out_buf, <span class="kw">sizeof</span>(out_buf), <span class="st">"%d\n"</span>, (<span class="kw">int</span>)rpm);
+<span class="fn">write</span>(client, out_buf, len);</pre>
+    </div>
+
+    <div class="code-box">
+      <div class="code-head"><div class="mac r"></div><div class="mac y"></div><div class="mac g"></div><span class="code-filename">MainActivity.kt — readActualRpm()</span></div>
+      <pre><span class="cm">// Blocks until '\n' arrives; handles partial reads safely</span>
+<span class="kw">val</span> line = bufferedReader?.<span class="fn">readLine</span>() ?: <span class="kw">return</span> -<span class="nu">1</span>
+
+<span class="cm">// Filter non-digit characters (null bytes, \r, garbage)</span>
+<span class="kw">val</span> cleanLine = line.<span class="fn">filter</span> { it.<span class="fn">isDigit</span>() }
+<span class="kw">return if</span> (cleanLine.<span class="fn">isNotEmpty</span>()) cleanLine.<span class="fn">toInt</span>() <span class="kw">else</span> -<span class="nu">1</span></pre>
+    </div>
+
+    <div class="code-box">
+      <div class="code-head"><div class="mac r"></div><div class="mac y"></div><div class="mac g"></div><span class="code-filename">MainActivity.kt — sendCommand()</span></div>
+      <pre><span class="kw">fun</span> <span class="fn">sendCommand</span>(isPowerOn: <span class="ty">Boolean</span>, direction: <span class="ty">String</span>, rpm: <span class="ty">Float</span>) {
+    <span class="kw">val</span> targetRpm = rpm.<span class="fn">toInt</span>()
+    <span class="kw">val</span> payload   = <span class="ty">ByteArray</span>(<span class="nu">4</span>)
+    payload[<span class="nu">0</span>] = <span class="kw">if</span> (isPowerOn)       <span class="nu">1</span> <span class="kw">else</span> <span class="nu">0</span>
+    payload[<span class="nu">1</span>] = <span class="kw">if</span> (direction == <span class="st">"CCW"</span>) <span class="nu">1</span> <span class="kw">else</span> <span class="nu">0</span>
+    payload[<span class="nu">2</span>] = ((targetRpm <span class="kw">shr</span> <span class="nu">8</span>) <span class="kw">and</span> <span class="nu">0xFF</span>).<span class="fn">toByte</span>()  <span class="cm">// high byte</span>
+    payload[<span class="nu">3</span>] = (targetRpm <span class="kw">and</span> <span class="nu">0xFF</span>).<span class="fn">toByte</span>()           <span class="cm">// low byte</span>
+    outputStream?.<span class="fn">write</span>(payload)
+}</pre>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- GPIO -->
+<section id="gpio">
+  <div class="wrap">
+    <div class="label">Hardware</div>
+    <h2>GPIO Pin Map</h2>
+    <p class="intro">All GPIO is memory-mapped directly via <code style="font-family:var(--mono);color:var(--accent);font-size:0.9em">/dev/gpiomem</code> using <code style="font-family:var(--mono);color:var(--accent);font-size:0.9em">mmap()</code> — no library dependency. GPFSEL, GPSET0, GPCLR0, and GPLEV0 registers are accessed by direct pointer arithmetic.</p>
+
+    <div class="gpio-grid">
+      <div class="gpio-item"><div class="gpio-pin">22</div><div><div class="g-name">GPIO_IN1</div><div class="g-role">L293D input 1 · OUTPUT</div></div></div>
+      <div class="gpio-item"><div class="gpio-pin">10</div><div><div class="g-name">GPIO_IN2</div><div class="g-role">L293D input 2 · OUTPUT</div></div></div>
+      <div class="gpio-item"><div class="gpio-pin">25</div><div><div class="g-name">GPIO_RPM</div><div class="g-role">IR sensor signal · INPUT</div></div></div>
+      <div class="gpio-item"><div class="gpio-pin">4</div><div><div class="g-name">GPIO_LED</div><div class="g-role">Status LED · OUTPUT</div></div></div>
+    </div>
+
+    <div class="hbox">
+      <div class="hico">🌀</div>
+      <div>
+        <h3>RPM Measurement — 3-blade propeller, rising-edge detection</h3>
+        <p>The rpm_worker thread polls GPIO 25 every 500 µs counting rising edges. With <code style="font-family:var(--mono);color:var(--accent);font-size:0.85em">PULSES_PER_REV = 3.0</code> (3 blades per revolution), RPM is computed over a 500 ms sample window:<br><br>
+        <code style="font-family:var(--mono);color:var(--text);font-size:0.85em">RPM = (60.0 × pulse_delta) / (3.0 × elapsed_seconds)</code><br><br>
+        The computed value is stored under mutex and transmitted to the phone in the same 500 ms pass.</p>
+      </div>
+    </div>
+
+    <div class="hbox">
+      <div class="hico">🔁</div>
+      <div>
+        <h3>L293D Direction Logic</h3>
+        <p>
+          <strong style="color:var(--text)">CW (DIR_FORWARD):</strong> IN2 = 0, IN1 = PWM, LED = PWM<br>
+          <strong style="color:var(--text)">CCW (DIR_REVERSE):</strong> IN1 = 0, IN2 = PWM, LED = PWM<br>
+          <strong style="color:var(--text)">STOP / OFF:</strong> IN1 = 0, IN2 = 0, LED = 0<br><br>
+          PWM is generated by a dedicated POSIX thread. Period = 2000 µs (500 Hz). On-time = <code style="font-family:var(--mono);color:var(--accent);font-size:0.85em">(2000 × duty%) / 100</code> µs. Timing via <code style="font-family:var(--mono);color:var(--accent);font-size:0.85em">nanosleep()</code>.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="wrap">
+    <div class="label">Capabilities</div>
+    <h2>What's Implemented</h2>
+    <p class="intro">Everything below is working in the current CP3 codebase. Automatic closed-loop modes are planned for the final checkpoint.</p>
+
+    <div class="cards">
+      <div class="card">
+        <span class="card-ico">🎛️</span>
+        <h3>Circular Dial — 400 to 7000 RPM</h3>
+        <p>Touch drag maps angle (135°–405°) to RPM. Sends a 4-byte binary command on every gesture update. Starting value is 400 RPM. Duty cycle saturates at 100% above 5700 RPM.</p>
+        <span class="tag done">✓ CP3</span>
+      </div>
+      <div class="card">
+        <span class="card-ico">🟢</span>
+        <h3>On / Off Power Toggle</h3>
+        <p>Center button toggles power. OFF sends power=0, which forces DIR_STOP and duty=0 on the Pi. Button shows green (ON) or red (OFF). State included in every 4-byte packet.</p>
+        <span class="tag done">✓ CP3</span>
+      </div>
+      <div class="card">
+        <span class="card-ico">🔄</span>
+        <h3>CW / CCW Direction</h3>
+        <p>Two circular side buttons select rotation direction. The command is only re-transmitted when direction actually changes. CW = IN1 active, CCW = IN2 active on the L293D.</p>
+        <span class="tag done">✓ CP3</span>
+      </div>
+      <div class="card">
+        <span class="card-ico">📡</span>
+        <h3>Live RPM Feedback</h3>
+        <p>IR sensor rising edges counted over a 500 ms window on the Pi. Actual RPM sent as ASCII string every 500 ms. Android reads it on a dedicated IO coroutine and updates the display in real time.</p>
+        <span class="tag done">✓ CP3</span>
+      </div>
+      <div class="card">
+        <span class="card-ico">⚡</span>
+        <h3>Software PWM @ 500 Hz</h3>
+        <p>Dedicated POSIX thread generates a 2000 µs period PWM signal via <code style="font-family:var(--mono);font-size:0.82em">nanosleep()</code>. On-time = (period × duty%) / 100. No hardware PWM dependency.</p>
+        <span class="tag done">✓ CP3</span>
+      </div>
+      <div class="card">
+        <span class="card-ico">🔵</span>
+        <h3>Bluetooth RFCOMM Reconnect</h3>
+        <p>RFCOMM socket uses <code style="font-family:var(--mono);font-size:0.82em">BT_SECURITY_LOW</code>, bypassing the Pi's GUI pairing prompt. Pi re-runs <code style="font-family:var(--mono);font-size:0.82em">bluetoothctl discoverable on</code> after every disconnect. Phone can reconnect after "Forget Device" without touching the Pi.</p>
+        <span class="tag done">✓ CP3</span>
+      </div>
+      <div class="card">
+        <span class="card-ico">🔒</span>
+        <h3>MAC Address Allowlist</h3>
+        <p>Pi compares the MAC of every incoming connection against a hardcoded constant. Any non-matching address is rejected with an immediate <code style="font-family:var(--mono);font-size:0.82em">close()</code>. Only the one authorized phone can drive the motor.</p>
+        <span class="tag done">✓ CP3</span>
+      </div>
+      <div class="card">
+        <span class="card-ico">🤖</span>
+        <h3>Automatic Maintain Mode</h3>
+        <p>Closed-loop PID control using actual vs. target RPM from the IR sensor. Pi adjusts duty cycle automatically to hold the setpoint. Planned for the final checkpoint.</p>
+        <span class="tag">CP4 Final</span>
+      </div>
+      <div class="card">
+        <span class="card-ico">🔗</span>
+        <h3>Automatic Match Mode</h3>
+        <p>Second IR sensor monitors an external propeller. The system dynamically matches its detected RPM. Requires second sensor and feedback loop. Planned for final checkpoint.</p>
+        <span class="tag">CP4 Final</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- PROGRESS -->
+<section id="progress">
+  <div class="wrap">
+    <div class="label">Project Timeline</div>
+    <h2>Checkpoints</h2>
+    <p class="intro">Four graded milestones building toward the complete PARMCO system.</p>
+
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-dot done"></div>
+        <div class="tl-label">CP1 · 5% of grade</div>
+        <div class="tl-title">Project Strategy &amp; Motor Schematic</div>
+        <div class="tl-body">Team plan, AI strategy, AI interaction documentation method. Preliminary motor schematic and annotated parts list generated by AI.</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot done"></div>
+        <div class="tl-label">CP2 · 20% of grade</div>
+        <div class="tl-title">Standalone Components</div>
+        <div class="tl-body">Android UI functional with basic controls. Bluetooth RFCOMM link established through the app. Pi accepts keyboard-driven motor commands (direction, speed, on/off). Full circuit schematic with L293D driver and AI-generated "how it works" analysis including the IR RPM sensor.</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot active"></div>
+        <div class="tl-label">CP3 · 25% of grade — Current</div>
+        <div class="tl-title">Full App ↔ Motor Integration</div>
+        <div class="tl-body">All manual commands working end-to-end from the app only — on/off, CW/CCW direction, dial-based speed control (400–7000 RPM), and live actual RPM displayed in the app from the IR sensor. Bluetooth auto-reconnect and MAC allowlist enforced on Pi. GitHub documentation site live.</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Final · 50% of grade</div>
+        <div class="tl-title">Automatic Modes + Full Demo</div>
+        <div class="tl-body">Automatic/Maintain PID closed-loop speed control. Automatic/Match using second IR sensor to track external propeller RPM. Full app uninstall/reinstall demo. Complete GitHub site and documentation. Individual and team reflection writeups.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="ac">PARMCO</div>
+  <div style="margin-top:8px">ECSE 4235 &nbsp;·&nbsp; Spring 2026 &nbsp;·&nbsp; <span class="ac2">Raspberry Pi 4 + Android</span> &nbsp;·&nbsp; Written in C / ARMv7 Assembly + Kotlin</div>
+</footer>
+
+</body>
+</html>
